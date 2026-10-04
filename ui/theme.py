@@ -274,9 +274,10 @@ code { font-family: var(--mono); font-size: 0.85em; }
 
 /* --- Callout ---------------------------------------------------------- */
 
+/* Block, not flex: in a narrow sidebar a flex row turns each text node into its
+   own column. */
 .callout {
-    display: flex;
-    gap: 0.7rem;
+    display: block;
     border: 1px solid var(--border);
     border-left: 3px solid var(--muted);
     border-radius: 8px;
@@ -291,7 +292,13 @@ code { font-family: var(--mono); font-size: 0.85em; }
 .callout.success { border-left-color: var(--success); background: var(--success-soft); }
 .callout.warning { border-left-color: var(--warning); background: var(--warning-soft); }
 .callout.danger  { border-left-color: var(--danger);  background: var(--danger-soft); }
-.callout-title { font-weight: 620; color: var(--ink); }
+.callout-title { font-weight: 620; color: var(--ink); margin-right: 0.25rem; }
+.callout code {
+    background: rgba(15, 23, 42, 0.06);
+    border-radius: 4px;
+    padding: 0.05rem 0.3rem;
+    word-break: break-all;
+}
 
 /* --- Empty state ------------------------------------------------------ */
 
