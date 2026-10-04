@@ -1,0 +1,46 @@
+services:
+  api:
+    build: .
+    container_name: hld-api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment:
+      # host.docker.internal reaches an Ollama instance running on the host.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b-instruct}
+      DATA_DIR: /app/data
+      VECTORSTORE_DIR: /app/data/vectorstore
+      UPLOAD_DIR: /app/data/uploads
+      DATABASE_URL: sqlite:////app/data/hld.db
+      TESSERACT_CMD: /usr/bin/tesseract
+    volumes:
+      - hld-data:/app/data
+      - model-cache:/app/.cache/huggingface
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # No egress beyond the host: engineering content stays inside this boundary.
+    restart: unless-stopped
+
+  ui:
+    build: .
+    container_name: hld-ui
+    command: streamlit run ui/Home.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
+    environment:
+      API_BASE_URL: http://api:8000
+      DATA_DIR: /app/data
+      VECTORSTORE_DIR: /app/data/vectorstore
+      DATABASE_URL: sqlite:////app/data/hld.db
+    volumes:
+      - hld-data:/app/data
+      - model-cache:/app/.cache/huggingface
+    ports:
+      - "8501:8501"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  hld-data:
+  model-cache:
