@@ -60,15 +60,22 @@ scripts/          end-to-end smoke test
 
 ## Interface
 
-Four pages: **Overview**, **Documents**, **HLD Analysis** and the two governance views,
-**Review Queue** and **Audit Trail**. HLD Analysis is the workspace, with tabs for architecture
-extraction, question answering, revision comparison and exports.
+Five views behind a dark navy sidebar: **Overview**, **Documents**, **HLD Analysis**, and the two
+governance views, **Review Queue** and **Audit Trail**. Overview is a dashboard of the workspace's
+current state. HLD Analysis is the engineering workstation: a persistent document toolbar, a strip
+of entity counts, then tabs for the inventory, dependencies, findings, dependency map, question
+answering, revision comparison and exports.
 
 The visual layer lives in `ui/theme.py` — a small design system of palette tokens, a stylesheet,
-and presentational helpers (page headers, stat cards, chips, callouts, evidence blocks, empty
-states). It deliberately uses the operating system's native font stack and inline SVG rather than
-a web font or icon pack, because anything fetched from a CDN would fail on an air-gapped machine
-and render as raw text.
+and presentational helpers (page headers, KPI strips, panels, dense tables, chips, callouts,
+evidence blocks, empty states). It deliberately uses the operating system's native font stack and
+inline SVG rather than a web font or icon pack, because anything fetched from a CDN would fail on
+an air-gapped machine and render as raw text.
+
+Read-only tables are rendered as HTML by `theme.table` rather than `st.dataframe`. Streamlit's
+grid draws to a canvas, so neither its row height nor its type scale can be adjusted, and a dense
+table is the point of an inventory view. Long free text is clamped to two lines with the full
+value kept as the cell tooltip.
 
 Every answer is shown the same way: the response, a confidence chip, a provenance chip saying
 whether it was model-generated or retrieval-only, then each supporting passage with its marker,

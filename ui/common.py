@@ -77,6 +77,7 @@ def sidebar() -> str | None:
     with st.sidebar:
         theme.brand(APP_NAME, APP_SUBTITLE)
 
+        theme.sidebar_label("Workflow")
         for label, path in NAVIGATION:
             try:
                 st.page_link(path, label=label)
@@ -97,21 +98,6 @@ def sidebar() -> str | None:
             )
             return None
 
-        theme.sidebar_label("Engine status")
-        if health["llm_available"]:
-            st.markdown(
-                theme.chip(f"Model ready · {health['llm_model']}", "success", dot=True),
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown(
-                theme.chip("Retrieval-only mode", "warning", dot=True),
-                unsafe_allow_html=True,
-            )
-        st.caption(f"Embeddings · {health['embedding_model'].split('/')[-1]}")
-
-        st.divider()
-        theme.sidebar_label("Workspace")
         try:
             projects = api_client.get("/projects")
         except ApiError as exc:
@@ -124,9 +110,7 @@ def sidebar() -> str | None:
         else:
             current = st.session_state.get("project")
             index = keys.index(current) if current in keys else 0
-            st.selectbox(
-                "Project", keys, index=index, key="project", label_visibility="collapsed"
-            )
+            st.selectbox("Workspace", keys, index=index, key="project")
 
         with st.expander("Create a workspace"):
             with st.form("new_project", clear_on_submit=True):
@@ -146,27 +130,38 @@ def sidebar() -> str | None:
                     except ApiError as exc:
                         st.error(str(exc))
 
-        st.divider()
-        theme.sidebar_label("Identity")
         st.session_state.setdefault("user", settings.default_user)
         st.text_input(
-            "User", key="user", label_visibility="collapsed",
+            "Identity", key="user",
             help="Sent as the X-User header. Access is checked against your project role.",
         )
 
         project = st.session_state.get("project")
+        role = ""
         if project:
             try:
                 members = api_client.get("/projects/members", {"project": project})
-                st.markdown(
-                    theme.chip(f"Role · {members['your_role']}", "neutral"),
-                    unsafe_allow_html=True,
-                )
+                role = members["your_role"]
             except ApiError:
                 pass
 
         st.divider()
-        st.caption(GOVERNANCE_NOTICE)
+        engine = (
+            theme.chip(health["llm_model"], "success", dot=True)
+            if health["llm_available"]
+            else theme.chip("Retrieval only", "warning", dot=True)
+        )
+        badges = [engine]
+        if role:
+            badges.append(theme.chip(role, "neutral"))
+        st.markdown(
+            '<div class="side-label">Engine</div>'
+            f'<div class="chiprow">{"".join(badges)}</div>'
+            f'<div class="side-foot">Embeddings '
+            f"{theme.esc(health['embedding_model'].split('/')[-1])}<br>"
+            "Local processing. Review required before use.</div>",
+            unsafe_allow_html=True,
+        )
         return project
 
 
@@ -235,7 +230,10 @@ def render_answer(result: dict) -> None:
         marker = html.escape(str(citation.get("marker", "")))
         label = html.escape(str(citation.get("label", "")))
         score = citation.get("score", 0) or 0
-        excerpt = html.escape(str(citation.get("excerpt", "")))
+        # Excerpts keep the source line breaks, but runs of blank lines would
+        # stretch the card out of proportion to the text it holds.
+        lines = [line.rstrip() for line in str(citation.get("excerpt", "")).splitlines()]
+        excerpt = html.escape("\n".join(line for line in lines if line).strip())
         marker_html = f'<span class="evidence-marker">{marker}</span>' if marker else ""
         st.markdown(
             f'<div class="evidence"><div class="evidence-head">{marker_html}'

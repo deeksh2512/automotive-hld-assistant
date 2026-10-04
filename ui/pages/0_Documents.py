@@ -7,7 +7,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from ui import api_client, theme  # noqa: E402
@@ -30,42 +29,113 @@ except Exception as exc:
 
 indexed = [d for d in documents if d["status"] == "indexed"]
 failed = [d for d in documents if d["status"] == "failed"]
+approved = [d for d in documents if d.get("approved_source")]
 
 page_header(
     "Documents",
-    "Source material is parsed, split on section boundaries, embedded locally and stored "
-    "in a vector collection scoped to this workspace.",
     kicker="Knowledge base",
     chips=[
+        theme.chip(project, "accent"),
         theme.chip(f"{len(indexed)} indexed", "success" if indexed else "neutral"),
-        theme.chip(f"{len(failed)} failed", "danger") if failed else "",
     ],
 )
 
-upload_tab, samples_tab, inventory_tab = st.tabs(
-    ["Upload", "Bundled samples", "Inventory"]
+theme.kpis(
+    [
+        ("Indexed", len(indexed), f"{len(documents)} ingested"),
+        ("Passages", sum(d["chunk_count"] for d in documents), "section-aligned"),
+        ("Approved sources", len(approved), "released material"),
+        ("Failed", len(failed), "need attention" if failed else "none"),
+    ],
+    tones=["", "", "", "warning" if failed else ""],
 )
 
-with upload_tab:
-    theme.callout(
-        "Only documents released through your official process should be marked as an "
-        "approved source. Everything stays on this machine: parsing, embedding and storage "
-        "are all local.",
-        tone="neutral",
+inventory_tab, upload_tab, samples_tab = st.tabs(["Inventory", "Upload", "Bundled samples"])
+
+with inventory_tab:
+    theme.table(
+        [
+            {
+                "name": document["name"],
+                "type": document["doc_type"].replace("_", " "),
+                "version": document["version_label"],
+                "approved": "Approved" if document.get("approved_source") else "Unverified",
+                "passages": document["chunk_count"],
+                "status": document["status"],
+                "created": (document["created_at"] or "")[:16].replace("T", " "),
+            }
+            for document in documents
+        ],
+        columns=[
+            {"key": "name", "label": "Document", "style": "strong"},
+            {"key": "type", "label": "Type", "style": "muted", "width": "13%"},
+            {"key": "version", "label": "Rev", "width": "7%"},
+            {
+                "key": "approved",
+                "label": "Source",
+                "style": "chip",
+                "width": "11%",
+                "tones": {"Approved": "success", "Unverified": "neutral"},
+            },
+            {"key": "passages", "label": "Passages", "style": "num", "width": "9%"},
+            {
+                "key": "status",
+                "label": "Status",
+                "style": "chip",
+                "width": "10%",
+                "tones": {"indexed": "success", "failed": "danger"},
+            },
+            {"key": "created", "label": "Indexed", "style": "mono", "width": "13%"},
+        ],
+        max_height="26rem",
+        empty="Nothing indexed yet. Upload a design document or load the bundled samples.",
     )
+
+    for document in failed:
+        theme.callout(
+            f"<b>{theme.esc(document['name'])}</b> — {theme.esc(document['error'])}",
+            title="Ingestion failed.",
+            tone="danger",
+        )
+
+    if documents:
+        names = {f"{d['name']} ({d['version_label']})": d["id"] for d in documents}
+        remove = st.columns([3, 1, 3], gap="small")
+        choice = remove[0].selectbox("Remove a document", list(names))
+        with remove[1]:
+            st.markdown('<div style="height:1.42rem"></div>', unsafe_allow_html=True)
+            if st.button("Delete", use_container_width=True):
+                try:
+                    api_client.delete(f"/documents/{names[choice]}", {"project": project})
+                    st.rerun()
+                except Exception as exc:
+                    show_error(exc)
+
+with upload_tab:
     with st.form("upload_form"):
         files = st.file_uploader(
             "Design documents",
             type=UPLOAD_TYPES,
             accept_multiple_files=True,
-            help="PDF, Word, spreadsheets, ARXML, markdown and source files are supported. "
+            help="PDF, Word, spreadsheets, ARXML, markdown and source files. "
                  "Scanned pages fall back to OCR.",
         )
-        columns = st.columns([2, 1, 1])
+        columns = st.columns([2, 1, 1, 1], gap="small")
         doc_type = columns[0].selectbox("Document type", DOC_TYPES)
         version_label = columns[1].text_input("Version label", value="v1")
-        approved = columns[2].checkbox("Approved source", value=True)
-        submitted = st.form_submit_button("Parse and index", type="primary")
+        with columns[2]:
+            st.markdown('<div style="height:1.42rem"></div>', unsafe_allow_html=True)
+            approved_source = st.checkbox("Approved source", value=True)
+        with columns[3]:
+            st.markdown('<div style="height:1.42rem"></div>', unsafe_allow_html=True)
+            submitted = st.form_submit_button(
+                "Parse and index", type="primary", use_container_width=True
+            )
+
+    st.caption(
+        "Parsing, embedding and storage are local. Only released material should be "
+        "marked as an approved source."
+    )
 
     if submitted and files:
         progress = st.progress(0.0, text="Indexing...")
@@ -78,18 +148,20 @@ with upload_tab:
                         "module": MODULE,
                         "doc_type": doc_type,
                         "version_label": version_label,
-                        "approved_source": str(approved).lower(),
+                        "approved_source": str(approved_source).lower(),
                     },
                     params={"project": project},
                 )
                 if result["status"] == "indexed":
                     theme.callout(
-                        f"<b>{result['name']}</b> — {result['chunk_count']} passages indexed.",
+                        f"<b>{theme.esc(result['name'])}</b> — "
+                        f"{result['chunk_count']} passages indexed.",
                         tone="success",
                     )
                 else:
                     theme.callout(
-                        f"<b>{result['name']}</b> — {result['error']}", tone="danger"
+                        f"<b>{theme.esc(result['name'])}</b> — {theme.esc(result['error'])}",
+                        tone="danger",
                     )
             except Exception as exc:
                 show_error(exc)
@@ -99,23 +171,18 @@ with upload_tab:
         theme.callout("Select at least one file before indexing.", tone="warning")
 
 with samples_tab:
-    theme.section(
-        "Synthetic sample design",
-        "Two revisions of a Body Control Module HLD, so extraction and comparison can be "
-        "tried immediately. They contain no real project data.",
-    )
-    columns = st.columns(2, gap="medium")
+    columns = st.columns(2, gap="small")
     with columns[0]:
         theme.card(
-            "Body Control Module HLD, revision A",
+            "Body Control Module HLD · revision A",
             "Components, ports, interfaces, signals and runnables for central locking, "
-            "window control, lighting and the diagnostic interface.",
+            "window control, lighting and diagnostics.",
         )
     with columns[1]:
         theme.card(
-            "Body Control Module HLD, revision B",
-            "The same design after a change cycle, with components added, removed and "
-            "renamed, so the revision diff has something to report.",
+            "Body Control Module HLD · revision B",
+            "The same design after a change cycle, with elements added, removed and "
+            "renamed so the revision diff has something to report.",
         )
 
     if st.button("Load the bundled samples", type="primary"):
@@ -126,53 +193,9 @@ with samples_tab:
                 show_error(exc)
                 results = []
         if results:
-            theme.callout(
-                f"Indexed {len(results)} sample document(s). Open HLD Analysis to continue.",
-                tone="success",
-            )
+            theme.callout(f"Indexed {len(results)} sample document(s).", tone="success")
             st.rerun()
         else:
             theme.callout("The samples are already loaded in this workspace.", tone="neutral")
 
-with inventory_tab:
-    if not documents:
-        theme.empty_state(
-            "Nothing indexed yet",
-            "Upload a design document, or load the bundled samples, to build the knowledge base.",
-        )
-    else:
-        frame = pd.DataFrame(documents)
-        st.dataframe(
-            frame[["name", "doc_type", "version_label", "approved_source",
-                   "chunk_count", "status", "created_at"]],
-            hide_index=True,
-            use_container_width=True,
-            column_config={
-                "name": st.column_config.TextColumn("Document", width="large"),
-                "doc_type": st.column_config.TextColumn("Type"),
-                "version_label": st.column_config.TextColumn("Version"),
-                "approved_source": st.column_config.CheckboxColumn("Approved"),
-                "chunk_count": st.column_config.NumberColumn("Passages", format="%d"),
-                "status": st.column_config.TextColumn("Status"),
-                "created_at": st.column_config.DatetimeColumn("Indexed", format="YYYY-MM-DD HH:mm"),
-            },
-        )
-
-        for document in failed:
-            theme.callout(
-                f"<b>{document['name']}</b> — {document['error']}",
-                title="Ingestion failed.",
-                tone="danger",
-            )
-
-        st.divider()
-        theme.section("Remove a document", "Deletes it from the vector index and from disk.")
-        names = {f"{d['name']} ({d['version_label']})": d["id"] for d in documents}
-        columns = st.columns([3, 1])
-        choice = columns[0].selectbox("Document", list(names), label_visibility="collapsed")
-        if columns[1].button("Delete", use_container_width=True):
-            try:
-                api_client.delete(f"/documents/{names[choice]}", {"project": project})
-                st.rerun()
-            except Exception as exc:
-                show_error(exc)
+    st.caption("Synthetic data. Contains no real project material.")

@@ -18,13 +18,12 @@ project = require_project()
 
 page_header(
     "Audit Trail",
-    "Every ingestion, query, generated artifact and review decision is recorded with its "
-    "actor and target. This is the evidence an assessor asks for.",
     kicker="Governance",
+    chips=[theme.chip(project, "accent")],
 )
 
-with st.expander("Filters", expanded=True):
-    limit = st.slider("Entries to load", 50, 1000, 200, step=50)
+filters = st.columns([1.2, 2, 2], gap="small")
+limit = filters[0].slider("Entries to load", 50, 1000, 200, step=50)
 
 try:
     entries = api_client.get("/audit", {"limit": limit})
@@ -40,39 +39,46 @@ if not entries:
     st.stop()
 
 frame = pd.DataFrame(entries)
-
-columns = st.columns(2, gap="medium")
 actions = sorted(frame["action"].unique())
-selected_actions = columns[0].multiselect("Action", actions, default=actions)
 actors = sorted(frame["actor"].unique())
-selected_actors = columns[1].multiselect("Actor", actors, default=actors)
+selected_actions = filters[1].multiselect("Action", actions, default=actions)
+selected_actors = filters[2].multiselect("Actor", actors, default=actors)
 
 filtered = frame[
     frame["action"].isin(selected_actions) & frame["actor"].isin(selected_actors)
 ]
 
-theme.stats([
-    ("Entries shown", len(filtered), f"of {len(frame)} loaded"),
-    ("Queries", int(filtered["action"].str.contains("query").sum()), ""),
-    ("Reviews", int(filtered["action"].str.contains("reviewed").sum()), ""),
-    ("Ingestions", int(filtered["action"].str.contains("ingest").sum()), ""),
-])
-
-st.markdown("")
-st.dataframe(
-    filtered[["created_at", "action", "actor", "detail"]],
-    hide_index=True,
-    use_container_width=True,
-    height=480,
-    column_config={
-        "created_at": st.column_config.DatetimeColumn("Timestamp", format="YYYY-MM-DD HH:mm:ss"),
-        "action": st.column_config.TextColumn("Action"),
-        "actor": st.column_config.TextColumn("Actor"),
-        "detail": st.column_config.TextColumn("Detail", width="large"),
-    },
+theme.kpis(
+    [
+        ("Entries shown", len(filtered), f"of {len(frame)} loaded"),
+        ("Queries", int(filtered["action"].str.contains("query").sum()), ""),
+        ("Reviews", int(filtered["action"].str.contains("reviewed").sum()), ""),
+        ("Ingestions", int(filtered["action"].str.contains("ingest").sum()), ""),
+    ]
 )
 
-footer = st.columns([1, 3])
+theme.table(
+    [
+        {
+            "created_at": (row["created_at"] or "")[:19].replace("T", " "),
+            "action": row["action"].replace("_", " "),
+            "actor": row["actor"],
+            "detail": row["detail"],
+        }
+        for row in filtered.to_dict("records")
+    ],
+    columns=[
+        {"key": "created_at", "label": "Timestamp", "style": "mono", "width": "13%"},
+        {"key": "action", "label": "Action", "style": "strong", "width": "14%"},
+        {"key": "actor", "label": "Actor", "style": "muted", "width": "10%"},
+        {"key": "detail", "label": "Detail", "style": "clamp"},
+    ],
+    max_height="30rem",
+    empty="No entries match the current filter.",
+)
+theme.table_note(f"{len(filtered)} of {len(frame)} entries")
+
+footer = st.columns([1, 2, 3], gap="small")
 footer[0].download_button(
     "Download CSV",
     filtered.to_csv(index=False).encode(),
@@ -81,4 +87,4 @@ footer[0].download_button(
 )
 
 with st.expander("Action breakdown"):
-    st.bar_chart(filtered["action"].value_counts(), color="#1D4ED8")
+    st.bar_chart(filtered["action"].value_counts(), color="#2563EB")
