@@ -442,19 +442,44 @@ def compare_revisions(
     }
 
 
+# Node styling per entity kind, matching the application palette.
+_NODE_STYLE = {
+    "component": ("#EFF4FF", "#1D4ED8", "#1E3A8A"),
+    "bsw_module": ("#F1F5F9", "#94A3B8", "#334155"),
+    "signal": ("#FFF8EB", "#D9A441", "#8A5A00"),
+    "pdu": ("#FFF8EB", "#D9A441", "#8A5A00"),
+    "interface": ("#F5F3FF", "#A78BFA", "#5B21B6"),
+    "runnable": ("#ECFDF3", "#6EC18E", "#15803D"),
+    "port": ("#F8FAFC", "#CBD5E1", "#475569"),
+}
+_DEFAULT_NODE_STYLE = ("#FFFFFF", "#CBD5E1", "#334155")
+
+
 def to_dot(entities: Sequence[Entity], dependencies: Sequence[Dependency]) -> str:
     """Graphviz source for the dependency map."""
-    lines = ["digraph architecture {", "  rankdir=LR;", "  node [shape=box, fontsize=10];"]
+    lines = [
+        "digraph architecture {",
+        '  graph [rankdir=LR, bgcolor="transparent", splines=spline, '
+        "nodesep=0.45, ranksep=0.85, pad=0.3];",
+        '  node [shape=box, style="rounded,filled", fontname="Segoe UI,Helvetica,Arial", '
+        "fontsize=10, penwidth=1.1, margin=\"0.18,0.11\"];",
+        '  edge [fontname="Segoe UI,Helvetica,Arial", fontsize=8, color="#94A3B8", '
+        'fontcolor="#64748B", arrowsize=0.7, penwidth=1.0];',
+    ]
     shown = {d.source for d in dependencies} | {d.target for d in dependencies}
     kinds = {e.name: e.kind for e in entities}
     for name in sorted(shown):
         kind = kinds.get(name, "unknown")
+        fill, border, text = _NODE_STYLE.get(kind, _DEFAULT_NODE_STYLE)
         shape = "box" if kind in {"component", "bsw_module"} else "ellipse"
-        lines.append(f'  "{name}" [shape={shape}, label="{name}\\n({kind})"];')
+        lines.append(
+            f'  "{name}" [shape={shape}, label="{name}\\n({kind})", '
+            f'fillcolor="{fill}", color="{border}", fontcolor="{text}"];'
+        )
     for dependency in dependencies:
         lines.append(
             f'  "{dependency.source}" -> "{dependency.target}" '
-            f'[label="{dependency.relation}", fontsize=8];'
+            f'[label="{dependency.relation}"];'
         )
     lines.append("}")
     return "\n".join(lines)

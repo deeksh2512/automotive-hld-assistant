@@ -1,27 +1,19 @@
-"""Shared Streamlit widgets: sidebar, model status, citation and confidence display."""
+"""Application shell: page setup, sidebar, and the shared result components."""
 
 from __future__ import annotations
 
+import html
 from typing import Any
 
 import streamlit as st
+from streamlit.errors import StreamlitPageNotFoundError
 
 from app.config import settings
-from ui import api_client
+from ui import api_client, theme
 from ui.api_client import ApiError
 
-CONFIDENCE_BADGE = {
-    "high": ("High confidence", "#1b7f3b"),
-    "medium": ("Medium confidence", "#b06a00"),
-    "low": ("Low confidence", "#b02a2a"),
-}
-
-REVIEW_BADGE = {
-    "pending_review": ("Pending review", "#b06a00"),
-    "approved": ("Approved", "#1b7f3b"),
-    "approved_with_edits": ("Approved with edits", "#1b7f3b"),
-    "rejected": ("Rejected", "#b02a2a"),
-}
+APP_NAME = "HLD Assistant"
+APP_SUBTITLE = "AUTOSAR architecture"
 
 GOVERNANCE_NOTICE = (
     "AI-assisted output must be traceable to approved source material and reviewed by an "
@@ -29,10 +21,48 @@ GOVERNANCE_NOTICE = (
     "software release or vehicle validation."
 )
 
+CONFIDENCE_TONE = {"high": "success", "medium": "warning", "low": "danger"}
+REVIEW_TONE = {
+    "pending_review": "warning",
+    "approved": "success",
+    "approved_with_edits": "success",
+    "rejected": "danger",
+}
+REVIEW_LABEL = {
+    "pending_review": "Pending review",
+    "approved": "Approved",
+    "approved_with_edits": "Approved with edits",
+    "rejected": "Rejected",
+}
+MODE_LABEL = {
+    "generated": "Model generated",
+    "retrieval_only": "Retrieval only",
+    "rule_based": "Rule based",
+}
 
-def page_setup(title: str, icon: str = "") -> None:
-    st.set_page_config(page_title=f"{title} | AUTOSAR HLD Assistant", layout="wide")
-    st.title(title)
+# Paths are resolved against the entrypoint directory. Material icons are
+# deliberately omitted: Streamlit fetches that font remotely and it would show
+# as raw text on a machine with no internet access.
+NAVIGATION = [
+    ("Overview", "Home.py"),
+    ("Documents", "pages/0_Documents.py"),
+    ("HLD Analysis", "pages/1_HLD_Analysis.py"),
+    ("Review Queue", "pages/2_Review_Queue.py"),
+    ("Audit Trail", "pages/3_Audit_Trail.py"),
+]
+
+
+def page_setup(title: str) -> None:
+    st.set_page_config(
+        page_title=f"{title} · {APP_NAME}",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+    theme.inject()
+
+
+def page_header(title: str, subtitle: str = "", kicker: str = "", chips=()) -> None:
+    theme.page_header(title, subtitle, kicker, chips)
 
 
 def _health() -> dict[str, Any] | None:
@@ -43,30 +73,45 @@ def _health() -> dict[str, Any] | None:
 
 
 def sidebar() -> str | None:
-    """Render the workspace selector and status panel. Returns the project key."""
+    """Render the workspace panel. Returns the selected project key."""
     with st.sidebar:
-        st.markdown("### AUTOSAR HLD Assistant")
+        theme.brand(APP_NAME, APP_SUBTITLE)
 
-        st.session_state.setdefault("user", settings.default_user)
-        st.text_input("Signed in as", key="user", help="Pilot identity header (X-User).")
+        for label, path in NAVIGATION:
+            try:
+                st.page_link(path, label=label)
+            except StreamlitPageNotFoundError:
+                # Sibling pages only resolve when Home.py is the entrypoint, which
+                # is not the case if someone runs a page file on its own.
+                break
+
+        st.divider()
 
         health = _health()
         if health is None:
-            st.error(
-                f"Backend not reachable at {settings.api_base_url}. "
-                "Start it with: uvicorn app.main:app --port 8000"
+            theme.callout(
+                f"Cannot reach the backend at <code>{settings.api_base_url}</code>. "
+                "Start it with <code>uvicorn app.main:app --port 8000</code>.",
+                title="Offline.",
+                tone="danger",
             )
             return None
 
+        theme.sidebar_label("Engine status")
         if health["llm_available"]:
-            st.success(f"Model ready: {health['llm_model']}")
+            st.markdown(
+                theme.chip(f"Model ready · {health['llm_model']}", "success", dot=True),
+                unsafe_allow_html=True,
+            )
         else:
-            st.warning("Retrieval-only mode")
-            st.caption(health["llm_detail"])
-
-        st.caption(f"Embeddings: {health['embedding_model']}")
+            st.markdown(
+                theme.chip("Retrieval-only mode", "warning", dot=True),
+                unsafe_allow_html=True,
+            )
+        st.caption(f"Embeddings · {health['embedding_model'].split('/')[-1]}")
 
         st.divider()
+        theme.sidebar_label("Workspace")
         try:
             projects = api_client.get("/projects")
         except ApiError as exc:
@@ -75,13 +120,15 @@ def sidebar() -> str | None:
 
         keys = [project["key"] for project in projects]
         if not keys:
-            st.info("No project workspaces exist yet.")
+            st.caption("No project workspaces exist yet.")
         else:
             current = st.session_state.get("project")
             index = keys.index(current) if current in keys else 0
-            st.selectbox("Project workspace", keys, index=index, key="project")
+            st.selectbox(
+                "Project", keys, index=index, key="project", label_visibility="collapsed"
+            )
 
-        with st.expander("New project"):
+        with st.expander("Create a workspace"):
             with st.form("new_project", clear_on_submit=True):
                 key = st.text_input("Key", placeholder="x200-bcm")
                 name = st.text_input("Name", placeholder="X200 Body Control Module")
@@ -99,11 +146,22 @@ def sidebar() -> str | None:
                     except ApiError as exc:
                         st.error(str(exc))
 
+        st.divider()
+        theme.sidebar_label("Identity")
+        st.session_state.setdefault("user", settings.default_user)
+        st.text_input(
+            "User", key="user", label_visibility="collapsed",
+            help="Sent as the X-User header. Access is checked against your project role.",
+        )
+
         project = st.session_state.get("project")
         if project:
             try:
                 members = api_client.get("/projects/members", {"project": project})
-                st.caption(f"Your role in this project: {members['your_role']}")
+                st.markdown(
+                    theme.chip(f"Role · {members['your_role']}", "neutral"),
+                    unsafe_allow_html=True,
+                )
             except ApiError:
                 pass
 
@@ -115,69 +173,94 @@ def sidebar() -> str | None:
 def require_project() -> str:
     project = sidebar()
     if not project:
-        st.info("Select or create a project workspace in the sidebar to continue.")
+        theme.empty_state(
+            "No workspace selected",
+            "Choose a project in the sidebar, or create one, to continue.",
+        )
         st.stop()
     return project
 
 
-def badge(label: str, colour: str) -> str:
-    return (
-        f"<span style='background:{colour};color:white;padding:2px 8px;"
-        f"border-radius:10px;font-size:0.78rem;white-space:nowrap'>{label}</span>"
-    )
+def confidence_chip(confidence: str, score: float | None = None) -> str:
+    tone = CONFIDENCE_TONE.get(confidence, "neutral")
+    label = f"{confidence.title()} confidence"
+    if score is not None:
+        label += f" · {score:.2f}"
+    return theme.chip(label, tone, dot=True)
+
+
+def review_chip(status: str) -> str:
+    return theme.chip(REVIEW_LABEL.get(status, status), REVIEW_TONE.get(status, "neutral"))
+
+
+# Retained so older call sites keep working.
+review_badge = review_chip
 
 
 def confidence_badge(confidence: str, score: float | None = None) -> None:
-    label, colour = CONFIDENCE_BADGE.get(confidence, ("Unknown", "#666"))
-    text = f"{label}{f' ({score:.2f})' if score is not None else ''}"
-    st.markdown(badge(text, colour), unsafe_allow_html=True)
-
-
-def review_badge(status: str) -> str:
-    label, colour = REVIEW_BADGE.get(status, (status, "#666"))
-    return badge(label, colour)
+    st.markdown(confidence_chip(confidence, score), unsafe_allow_html=True)
 
 
 def render_answer(result: dict) -> None:
-    """Standard presentation: answer, confidence, warnings, then every citation."""
-    columns = st.columns([3, 1])
-    with columns[1]:
-        confidence_badge(result.get("confidence", "low"), result.get("confidence_score"))
-        mode = result.get("mode", "")
-        st.caption(
-            "Generated by the local model"
-            if mode == "generated"
-            else "Retrieval only, no model output"
-            if mode == "retrieval_only"
-            else "Rule-based"
-        )
-    with columns[0]:
-        st.markdown(result.get("answer", ""))
+    """Answer, provenance, warnings and every supporting citation."""
+    mode = result.get("mode", "")
+    chips = [
+        confidence_chip(result.get("confidence", "low"), result.get("confidence_score")),
+        theme.chip(MODE_LABEL.get(mode, mode or "Unknown"), "neutral"),
+    ]
+    body = html.escape(result.get("answer", "")).replace("\n", "<br>")
+    st.markdown(
+        f'<div class="answer"><div class="answer-head">'
+        f'<span class="answer-label">Answer</span>'
+        f'<span class="answer-meta">{"".join(chips)}</span></div>'
+        f'<div class="answer-body">{body}</div></div>',
+        unsafe_allow_html=True,
+    )
 
     for warning in result.get("warnings", []):
-        st.warning(warning)
+        theme.callout(html.escape(warning), tone="warning")
 
     citations = result.get("citations") or result.get("sources") or []
-    if citations:
-        st.markdown("**Evidence**")
-        for citation in citations:
-            with st.expander(
-                f"{citation.get('marker', '')} {citation.get('label', '')}"
-                f"  ·  relevance {citation.get('score', 0):.2f}"
-            ):
-                st.text(citation.get("excerpt", ""))
-    else:
-        st.caption("No source citations were produced for this response.")
+    if not citations:
+        theme.callout(
+            "No source citations were produced for this response, so it is not grounded "
+            "in the indexed documents.",
+            tone="danger",
+        )
+        return
+
+    st.markdown("")
+    theme.section("Evidence", f"{len(citations)} passage(s) retrieved from indexed documents")
+    for citation in citations:
+        marker = html.escape(str(citation.get("marker", "")))
+        label = html.escape(str(citation.get("label", "")))
+        score = citation.get("score", 0) or 0
+        excerpt = html.escape(str(citation.get("excerpt", "")))
+        marker_html = f'<span class="evidence-marker">{marker}</span>' if marker else ""
+        st.markdown(
+            f'<div class="evidence"><div class="evidence-head">{marker_html}'
+            f'<span class="evidence-source">{label}</span>'
+            f'<span class="evidence-score">relevance {score:.2f}</span></div>'
+            f'<div class="evidence-text">{excerpt}</div></div>',
+            unsafe_allow_html=True,
+        )
 
 
 def render_review_controls(artifact_id: str, project: str, key_prefix: str) -> None:
-    """The mandatory human disposition control required for consequential output."""
-    with st.expander("Record review decision"):
-        comment = st.text_area("Reviewer comment", key=f"{key_prefix}_comment")
-        columns = st.columns(3)
-        decisions = [("Accept", "accepted"), ("Accept with edits", "edited"), ("Reject", "rejected")]
-        for column, (label, decision) in zip(columns, decisions):
-            if column.button(label, key=f"{key_prefix}_{decision}"):
+    """The human disposition control required before output may be used."""
+    with st.expander("Record a review decision"):
+        comment = st.text_area(
+            "Reviewer comment", key=f"{key_prefix}_comment",
+            placeholder="What did you check, and against which source?",
+        )
+        columns = st.columns([1, 1, 1, 3])
+        decisions = [
+            ("Accept", "accepted", "primary"),
+            ("Accept with edits", "edited", "secondary"),
+            ("Reject", "rejected", "secondary"),
+        ]
+        for column, (label, decision, kind) in zip(columns, decisions):
+            if column.button(label, key=f"{key_prefix}_{decision}", type=kind):
                 try:
                     api_client.post(
                         f"/artifacts/{artifact_id}/review",
@@ -192,17 +275,24 @@ def render_review_controls(artifact_id: str, project: str, key_prefix: str) -> N
 def show_error(exc: Exception) -> None:
     if isinstance(exc, ApiError):
         if exc.status_code == 403:
-            st.error(f"Not permitted: {exc.detail}")
+            theme.callout(html.escape(str(exc.detail)), title="Not permitted.", tone="danger")
         elif exc.status_code == 503:
-            st.warning(str(exc.detail))
+            theme.callout(html.escape(str(exc.detail)), title="Model unavailable.", tone="warning")
         else:
-            st.error(f"{exc.status_code}: {exc.detail}")
+            theme.callout(
+                html.escape(str(exc.detail)), title=f"Request failed ({exc.status_code}).",
+                tone="danger",
+            )
     else:
-        st.error(str(exc))
+        theme.callout(html.escape(str(exc)), title="Error.", tone="danger")
 
 
 def document_selector(
-    project: str, module: str, label: str = "Document", key: str | None = None
+    project: str,
+    module: str,
+    label: str = "Document",
+    key: str | None = None,
+    default_index: int = 0,
 ) -> dict | None:
     try:
         documents = [
@@ -214,11 +304,17 @@ def document_selector(
         show_error(exc)
         return None
     if not documents:
-        st.info(
-            f"No indexed documents in the '{module}' collection. "
-            "Upload one on the Documents page, or load the bundled samples."
+        theme.empty_state(
+            "No indexed documents",
+            "Upload a design document on the Documents page, or load the bundled samples.",
         )
         return None
-    names = [f"{d['name']} ({d['version_label']}, {d['chunk_count']} chunks)" for d in documents]
-    choice = st.selectbox(label, range(len(documents)), format_func=lambda i: names[i], key=key)
+    names = [f"{d['name']}  ·  {d['version_label']}  ·  {d['chunk_count']} chunks" for d in documents]
+    choice = st.selectbox(
+        label,
+        range(len(documents)),
+        index=min(default_index, len(documents) - 1),
+        format_func=lambda i: names[i],
+        key=key,
+    )
     return documents[choice]

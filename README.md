@@ -58,6 +58,30 @@ scripts/          end-to-end smoke test
   added, removed, or changed.
 - **Export** — the inventory as CSV or JSON for downstream tooling.
 
+## Interface
+
+Four pages: **Overview**, **Documents**, **HLD Analysis** and the two governance views,
+**Review Queue** and **Audit Trail**. HLD Analysis is the workspace, with tabs for architecture
+extraction, question answering, revision comparison and exports.
+
+The visual layer lives in `ui/theme.py` — a small design system of palette tokens, a stylesheet,
+and presentational helpers (page headers, stat cards, chips, callouts, evidence blocks, empty
+states). It deliberately uses the operating system's native font stack and inline SVG rather than
+a web font or icon pack, because anything fetched from a CDN would fail on an air-gapped machine
+and render as raw text.
+
+Every answer is shown the same way: the response, a confidence chip, a provenance chip saying
+whether it was model-generated or retrieval-only, then each supporting passage with its marker,
+source document, page and relevance score.
+
+To capture the interface for a report or review:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install playwright
+.\.venv\Scripts\python.exe -m playwright install chromium
+.\.venv\Scripts\python.exe scripts\screenshot.py http://localhost:8501 shots
+```
+
 ## Quick start (Windows)
 
 ```powershell
