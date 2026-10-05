@@ -1,13 +1,88 @@
-.venv/
+# ---------------------------------------------------------------------------
+# Secrets and local configuration
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+*.pem
+*.key
+*.pfx
+credentials.json
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
-.env
-data/vectorstore/
-data/uploads/
-data/*.db
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# ---------------------------------------------------------------------------
+# Virtual environments
+# ---------------------------------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# ---------------------------------------------------------------------------
+# Test, lint and type-checker caches
+# ---------------------------------------------------------------------------
 .pytest_cache/
-.streamlit/secrets.toml
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# ---------------------------------------------------------------------------
+# Application data — rebuilt on first run, and may contain engineering content
+# that must not leave the machine. data/samples/ stays tracked: the bundled
+# design documents ship with the project.
+# ---------------------------------------------------------------------------
+data/uploads/
+data/vectorstore/
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+
+# ---------------------------------------------------------------------------
+# Local model caches. Ollama keeps its models under the user profile, but these
+# patterns also cover HF_HOME or OLLAMA_MODELS pointed inside the repository.
+# ---------------------------------------------------------------------------
+.cache/
+.ollama/
+models/
+*.gguf
+*.safetensors
+*.onnx
+
+# ---------------------------------------------------------------------------
+# Generated output and logs
+# ---------------------------------------------------------------------------
 shots/
 screenshots/
-*.egg-info/
+exports/
+*.log
+logs/
+
+# ---------------------------------------------------------------------------
+# Editors and operating systems
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
 .DS_Store
+Thumbs.db
+desktop.ini
