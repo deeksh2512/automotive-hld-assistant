@@ -41,20 +41,21 @@ except Exception as exc:
     st.stop()
 
 try:
-    activity = api_client.get("/audit", {"limit": 8})
+    activity = api_client.get("/audit", {"limit": 9})
 except Exception:
     activity = []
 
 indexed = [d for d in documents if d["status"] == "indexed"]
 pending = [a for a in artifacts if a["review_status"] == "pending_review"]
 approved = [a for a in artifacts if a["review_status"].startswith("approved")]
+inventories = [a for a in artifacts if a["artifact_type"] == "hld_entity"]
 passages = sum(d["chunk_count"] for d in documents)
 
 page_header(
     "Workspace overview",
-    kicker="HLD Assistant",
+    kicker=project,
     chips=[
-        theme.chip(project, "accent"),
+        theme.chip(f"{len(indexed)} documents", "neutral"),
         theme.chip("Model ready", "success", dot=True)
         if health["llm_available"]
         else theme.chip("Retrieval only", "warning", dot=True),
@@ -65,10 +66,11 @@ theme.kpis(
     [
         ("Documents", len(indexed), f"{len(documents)} ingested"),
         ("Passages", passages, "page-anchored"),
+        ("Extractions", len(inventories), "architecture inventories"),
         ("Artifacts", len(artifacts), f"{len(approved)} approved"),
         ("Awaiting review", len(pending), "needs a decision" if pending else "queue clear"),
     ],
-    tones=["", "", "", "warning" if pending else ""],
+    tones=["", "", "", "", "warning" if pending else "success"],
 )
 
 if not documents:
@@ -79,19 +81,18 @@ if not documents:
         tone="accent",
     )
 
-left, right = st.columns([1.45, 1], gap="small")
+left, right = st.columns([1.5, 1], gap="small")
 
 with left:
     with st.container(border=True):
         theme.panel_bar(
-            "Knowledge base",
-            meta=[theme.chip(f"{len(indexed)} indexed", "neutral")],
+            "Knowledge base", meta=[theme.chip(f"{passages} passages", "neutral")]
         )
         theme.table(
             [
                 {
                     "name": document["name"],
-                    "version": document["version_label"],
+                    "rev": document["version_label"],
                     "type": document["doc_type"].replace("_", " "),
                     "passages": document["chunk_count"],
                     "status": document["status"],
@@ -99,15 +100,15 @@ with left:
                 for document in documents
             ],
             columns=[
-                {"key": "name", "label": "Document", "style": "strong"},
-                {"key": "version", "label": "Rev", "width": "8%"},
-                {"key": "type", "label": "Type", "style": "muted", "width": "16%"},
-                {"key": "passages", "label": "Passages", "style": "num", "width": "12%"},
+                {"key": "name", "label": "Document", "style": "mono"},
+                {"key": "rev", "label": "Rev", "style": "mono", "width": "9%"},
+                {"key": "type", "label": "Type", "style": "muted", "width": "15%"},
+                {"key": "passages", "label": "Passages", "style": "num", "width": "13%"},
                 {
                     "key": "status",
                     "label": "Status",
                     "style": "chip",
-                    "width": "14%",
+                    "width": "13%",
                     "tones": {"indexed": "success", "failed": "danger"},
                 },
             ],
@@ -116,13 +117,32 @@ with left:
         )
         st.page_link("pages/0_Documents.py", label="Manage documents")
 
+    with st.container(border=True):
+        theme.panel_bar("Recent activity", meta=[theme.chip("Audit log", "neutral")])
+        theme.table(
+            [
+                {
+                    "time": (entry["created_at"] or "")[:19].replace("T", " "),
+                    "action": entry["action"],
+                    "detail": entry["detail"],
+                }
+                for entry in activity
+            ],
+            columns=[
+                {"key": "time", "label": "Timestamp", "style": "mono", "width": "19%"},
+                {"key": "action", "label": "Action", "style": "strong", "width": "19%"},
+                {"key": "detail", "label": "Detail", "style": "clamp"},
+            ],
+            max_height="none",
+            empty="No activity recorded yet.",
+        )
+        st.page_link("pages/3_Audit_Trail.py", label="Open audit trail")
+
 with right:
     with st.container(border=True):
         theme.panel_bar(
             "Review queue",
-            meta=[
-                theme.chip(f"{len(pending)} pending", "warning" if pending else "success")
-            ],
+            meta=[theme.chip(f"{len(pending)} pending", "warning" if pending else "success")],
         )
         theme.table(
             [
@@ -133,7 +153,7 @@ with right:
                         artifact["review_status"], artifact["review_status"]
                     ),
                 }
-                for artifact in artifacts[:7]
+                for artifact in artifacts[:14]
             ],
             columns=[
                 {"key": "ref", "label": "Ref", "style": "mono", "width": "22%"},
@@ -142,7 +162,7 @@ with right:
                     "key": "status",
                     "label": "Review",
                     "style": "chip",
-                    "width": "26%",
+                    "width": "27%",
                     "tones": {
                         label: REVIEW_TONE[status] for status, label in REVIEW_LABEL.items()
                     },
@@ -152,26 +172,3 @@ with right:
             empty="No artifacts produced yet.",
         )
         st.page_link("pages/2_Review_Queue.py", label="Open review queue")
-
-with st.container(border=True):
-    theme.panel_bar("Recent activity", meta=[theme.chip("Audit log", "neutral")])
-    theme.table(
-        [
-            {
-                "time": (entry["created_at"] or "")[:19].replace("T", " "),
-                "action": entry["action"].replace("_", " "),
-                "actor": entry["actor"],
-                "detail": entry["detail"],
-            }
-            for entry in activity
-        ],
-        columns=[
-            {"key": "time", "label": "Timestamp", "style": "mono", "width": "15%"},
-            {"key": "action", "label": "Action", "style": "strong", "width": "16%"},
-            {"key": "actor", "label": "Actor", "style": "muted", "width": "12%"},
-            {"key": "detail", "label": "Detail", "style": "clamp"},
-        ],
-        max_height="none",
-        empty="No activity recorded yet.",
-    )
-    st.page_link("pages/3_Audit_Trail.py", label="Open audit trail")

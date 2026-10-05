@@ -442,17 +442,18 @@ def compare_revisions(
     }
 
 
-# Node styling per entity kind, matching the application palette.
+# Fill, border and label colour per entity kind, tuned for the dark canvas the
+# map is drawn on.
 _NODE_STYLE = {
-    "component": ("#EFF4FF", "#1D4ED8", "#1E3A8A"),
-    "bsw_module": ("#F1F5F9", "#94A3B8", "#334155"),
-    "signal": ("#FFF8EB", "#D9A441", "#8A5A00"),
-    "pdu": ("#FFF8EB", "#D9A441", "#8A5A00"),
-    "interface": ("#F5F3FF", "#A78BFA", "#5B21B6"),
-    "runnable": ("#ECFDF3", "#6EC18E", "#15803D"),
-    "port": ("#F8FAFC", "#CBD5E1", "#475569"),
+    "component": ("#15294A", "#3B82F6", "#CFE0FF"),
+    "bsw_module": ("#18212F", "#4A5C77", "#C2CEE0"),
+    "signal": ("#2B2413", "#B5891F", "#F5D88A"),
+    "pdu": ("#2B2413", "#B5891F", "#F5D88A"),
+    "interface": ("#241E3D", "#7C6BD1", "#D6CCFA"),
+    "runnable": ("#102A22", "#2F8F6D", "#9BE7C8"),
+    "port": ("#141D2D", "#3A4A66", "#A9B8CE"),
 }
-_DEFAULT_NODE_STYLE = ("#FFFFFF", "#CBD5E1", "#334155")
+_DEFAULT_NODE_STYLE = ("#141D2D", "#3A4A66", "#C2CEE0")
 
 
 def to_dot(entities: Sequence[Entity], dependencies: Sequence[Dependency]) -> str:
@@ -461,10 +462,10 @@ def to_dot(entities: Sequence[Entity], dependencies: Sequence[Dependency]) -> st
         "digraph architecture {",
         '  graph [rankdir=LR, bgcolor="transparent", splines=spline, '
         "nodesep=0.45, ranksep=0.85, pad=0.3];",
-        '  node [shape=box, style="rounded,filled", fontname="Segoe UI,Helvetica,Arial", '
+        '  node [shape=box, style="filled", fontname="Segoe UI,Helvetica,Arial", '
         "fontsize=10, penwidth=1.1, margin=\"0.18,0.11\"];",
-        '  edge [fontname="Segoe UI,Helvetica,Arial", fontsize=8, color="#94A3B8", '
-        'fontcolor="#64748B", arrowsize=0.7, penwidth=1.0];',
+        '  edge [fontname="Segoe UI,Helvetica,Arial", fontsize=8, color="#5A7091", '
+        'fontcolor="#93A6C2", arrowsize=0.7, penwidth=1.0];',
     ]
     shown = {d.source for d in dependencies} | {d.target for d in dependencies}
     kinds = {e.name: e.kind for e in entities}

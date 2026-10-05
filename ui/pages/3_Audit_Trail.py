@@ -16,14 +16,9 @@ from ui.common import page_header, page_setup, require_project, show_error  # no
 page_setup("Audit Trail")
 project = require_project()
 
-page_header(
-    "Audit Trail",
-    kicker="Governance",
-    chips=[theme.chip(project, "accent")],
-)
+page_header("Audit Trail", kicker=project)
 
-filters = st.columns([1.2, 2, 2], gap="small")
-limit = filters[0].slider("Entries to load", 50, 1000, 200, step=50)
+limit = st.session_state.setdefault("audit_limit", 200)
 
 try:
     entries = api_client.get("/audit", {"limit": limit})
@@ -41,19 +36,37 @@ if not entries:
 frame = pd.DataFrame(entries)
 actions = sorted(frame["action"].unique())
 actors = sorted(frame["actor"].unique())
-selected_actions = filters[1].multiselect("Action", actions, default=actions)
-selected_actors = filters[2].multiselect("Actor", actors, default=actors)
 
-filtered = frame[
-    frame["action"].isin(selected_actions) & frame["actor"].isin(selected_actors)
-]
+with st.container(border=True):
+    theme.panel_bar("Filters", meta=[theme.chip(f"{len(frame)} entries loaded", "neutral")])
+    filters = st.columns([2, 2, 1.4, 1.2], gap="small")
+    search = filters[0].text_input("Search detail", placeholder="Reference, document or text")
+    selected_actions = filters[1].multiselect("Action", actions)
+    selected_actors = filters[2].multiselect("Actor", actors)
+    filters[3].select_slider(
+        "Entries to load", [50, 100, 200, 500, 1000], key="audit_limit"
+    )
+
+mask = pd.Series(True, index=frame.index)
+if selected_actions:
+    mask &= frame["action"].isin(selected_actions)
+if selected_actors:
+    mask &= frame["actor"].isin(selected_actors)
+if search.strip():
+    needle = search.strip().lower()
+    mask &= (
+        frame["detail"].fillna("").str.lower().str.contains(needle, regex=False)
+        | frame["action"].str.lower().str.contains(needle, regex=False)
+    )
+filtered = frame[mask]
 
 theme.kpis(
     [
         ("Entries shown", len(filtered), f"of {len(frame)} loaded"),
-        ("Queries", int(filtered["action"].str.contains("query").sum()), ""),
-        ("Reviews", int(filtered["action"].str.contains("reviewed").sum()), ""),
         ("Ingestions", int(filtered["action"].str.contains("ingest").sum()), ""),
+        ("Queries", int(filtered["action"].str.contains("query").sum()), ""),
+        ("Artifacts", int(filtered["action"].str.contains("artifact.created").sum()), ""),
+        ("Reviews", int(filtered["action"].str.contains("reviewed").sum()), ""),
     ]
 )
 
@@ -61,7 +74,7 @@ theme.table(
     [
         {
             "created_at": (row["created_at"] or "")[:19].replace("T", " "),
-            "action": row["action"].replace("_", " "),
+            "action": row["action"],
             "actor": row["actor"],
             "detail": row["detail"],
         }
@@ -73,12 +86,12 @@ theme.table(
         {"key": "actor", "label": "Actor", "style": "muted", "width": "10%"},
         {"key": "detail", "label": "Detail", "style": "clamp"},
     ],
-    max_height="30rem",
+    max_height="32rem",
     empty="No entries match the current filter.",
+    note=f"{len(filtered)} of {len(frame)} entries",
 )
-theme.table_note(f"{len(filtered)} of {len(frame)} entries")
 
-footer = st.columns([1, 2, 3], gap="small")
+footer = st.columns([1, 2, 4], gap="small")
 footer[0].download_button(
     "Download CSV",
     filtered.to_csv(index=False).encode(),
@@ -87,4 +100,4 @@ footer[0].download_button(
 )
 
 with st.expander("Action breakdown"):
-    st.bar_chart(filtered["action"].value_counts(), color="#2563EB")
+    st.bar_chart(filtered["action"].value_counts(), color="#3B82F6", height=240)

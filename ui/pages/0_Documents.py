@@ -33,10 +33,10 @@ approved = [d for d in documents if d.get("approved_source")]
 
 page_header(
     "Documents",
-    kicker="Knowledge base",
+    kicker=project,
     chips=[
-        theme.chip(project, "accent"),
         theme.chip(f"{len(indexed)} indexed", "success" if indexed else "neutral"),
+        theme.chip(f"{len(failed)} failed", "danger") if failed else "",
     ],
 )
 
@@ -47,7 +47,7 @@ theme.kpis(
         ("Approved sources", len(approved), "released material"),
         ("Failed", len(failed), "need attention" if failed else "none"),
     ],
-    tones=["", "", "", "warning" if failed else ""],
+    tones=["", "", "", "danger" if failed else ""],
 )
 
 inventory_tab, upload_tab, samples_tab = st.tabs(["Inventory", "Upload", "Bundled samples"])
@@ -58,7 +58,7 @@ with inventory_tab:
             {
                 "name": document["name"],
                 "type": document["doc_type"].replace("_", " "),
-                "version": document["version_label"],
+                "rev": document["version_label"],
                 "approved": "Approved" if document.get("approved_source") else "Unverified",
                 "passages": document["chunk_count"],
                 "status": document["status"],
@@ -67,9 +67,9 @@ with inventory_tab:
             for document in documents
         ],
         columns=[
-            {"key": "name", "label": "Document", "style": "strong"},
+            {"key": "name", "label": "Document", "style": "mono"},
             {"key": "type", "label": "Type", "style": "muted", "width": "13%"},
-            {"key": "version", "label": "Rev", "width": "7%"},
+            {"key": "rev", "label": "Rev", "style": "mono", "width": "7%"},
             {
                 "key": "approved",
                 "label": "Source",
@@ -85,9 +85,9 @@ with inventory_tab:
                 "width": "10%",
                 "tones": {"indexed": "success", "failed": "danger"},
             },
-            {"key": "created", "label": "Indexed", "style": "mono", "width": "13%"},
+            {"key": "created", "label": "Indexed", "style": "mono", "width": "14%"},
         ],
-        max_height="26rem",
+        max_height="28rem",
         empty="Nothing indexed yet. Upload a design document or load the bundled samples.",
     )
 
@@ -100,10 +100,10 @@ with inventory_tab:
 
     if documents:
         names = {f"{d['name']} ({d['version_label']})": d["id"] for d in documents}
-        remove = st.columns([3, 1, 3], gap="small")
+        remove = st.columns([3, 1, 4], gap="small")
         choice = remove[0].selectbox("Remove a document", list(names))
         with remove[1]:
-            st.markdown('<div style="height:1.42rem"></div>', unsafe_allow_html=True)
+            st.markdown('<div style="height:1.3rem"></div>', unsafe_allow_html=True)
             if st.button("Delete", use_container_width=True):
                 try:
                     api_client.delete(f"/documents/{names[choice]}", {"project": project})
@@ -124,10 +124,10 @@ with upload_tab:
         doc_type = columns[0].selectbox("Document type", DOC_TYPES)
         version_label = columns[1].text_input("Version label", value="v1")
         with columns[2]:
-            st.markdown('<div style="height:1.42rem"></div>', unsafe_allow_html=True)
+            st.markdown('<div style="height:1.3rem"></div>', unsafe_allow_html=True)
             approved_source = st.checkbox("Approved source", value=True)
         with columns[3]:
-            st.markdown('<div style="height:1.42rem"></div>', unsafe_allow_html=True)
+            st.markdown('<div style="height:1.3rem"></div>', unsafe_allow_html=True)
             submitted = st.form_submit_button(
                 "Parse and index", type="primary", use_container_width=True
             )
@@ -171,19 +171,29 @@ with upload_tab:
         theme.callout("Select at least one file before indexing.", tone="warning")
 
 with samples_tab:
-    columns = st.columns(2, gap="small")
-    with columns[0]:
-        theme.card(
-            "Body Control Module HLD · revision A",
-            "Components, ports, interfaces, signals and runnables for central locking, "
-            "window control, lighting and diagnostics.",
-        )
-    with columns[1]:
-        theme.card(
-            "Body Control Module HLD · revision B",
-            "The same design after a change cycle, with elements added, removed and "
-            "renamed so the revision diff has something to report.",
-        )
+    theme.table(
+        [
+            {
+                "name": "sample_hld_body_control.md",
+                "rev": "rev-a",
+                "content": "Central locking, window control, lighting and the diagnostic "
+                           "interface: components, ports, interfaces, signals, runnables.",
+            },
+            {
+                "name": "sample_hld_body_control_rev_b.md",
+                "rev": "rev-b",
+                "content": "The same design after a change cycle, with elements added, "
+                           "removed and renamed so the revision diff has something to report.",
+            },
+        ],
+        columns=[
+            {"key": "name", "label": "File", "style": "mono", "width": "28%"},
+            {"key": "rev", "label": "Rev", "style": "mono", "width": "8%"},
+            {"key": "content", "label": "Contents", "style": "clamp"},
+        ],
+        max_height="none",
+        note="Synthetic data. Contains no real project material.",
+    )
 
     if st.button("Load the bundled samples", type="primary"):
         with st.spinner("Parsing, embedding and indexing..."):
@@ -197,5 +207,3 @@ with samples_tab:
             st.rerun()
         else:
             theme.callout("The samples are already loaded in this workspace.", tone="neutral")
-
-    st.caption("Synthetic data. Contains no real project material.")

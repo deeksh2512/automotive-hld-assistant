@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import re
 from typing import Any
 
 import streamlit as st
@@ -15,6 +16,7 @@ from ui.api_client import ApiError
 APP_NAME = "HLD Assistant"
 APP_SUBTITLE = "AUTOSAR architecture"
 
+# Shown as the sidebar footer tooltip: the policy the review queue exists to enforce.
 GOVERNANCE_NOTICE = (
     "AI-assisted output must be traceable to approved source material and reviewed by an "
     "authorised engineering specialist before it is used for compliance, design approval, "
@@ -159,7 +161,8 @@ def sidebar() -> str | None:
             f'<div class="chiprow">{"".join(badges)}</div>'
             f'<div class="side-foot">Embeddings '
             f"{theme.esc(health['embedding_model'].split('/')[-1])}<br>"
-            "Local processing. Review required before use.</div>",
+            f'<span title="{theme.esc(GOVERNANCE_NOTICE)}">'
+            "Local processing · review required before use</span></div>",
             unsafe_allow_html=True,
         )
         return project
@@ -204,6 +207,8 @@ def render_answer(result: dict) -> None:
         theme.chip(MODE_LABEL.get(mode, mode or "Unknown"), "neutral"),
     ]
     body = html.escape(result.get("answer", "")).replace("\n", "<br>")
+    # Make the inline evidence markers scannable against the prose.
+    body = re.sub(r"\[S\d{1,2}\]", r'<span class="ref-mark">\g<0></span>', body)
     st.markdown(
         f'<div class="answer"><div class="answer-head">'
         f'<span class="answer-label">Answer</span>'

@@ -60,17 +60,24 @@ scripts/          end-to-end smoke test
 
 ## Interface
 
-Five views behind a dark navy sidebar: **Overview**, **Documents**, **HLD Analysis**, and the two
-governance views, **Review Queue** and **Audit Trail**. Overview is a dashboard of the workspace's
-current state. HLD Analysis is the engineering workstation: a persistent document toolbar, a strip
-of entity counts, then tabs for the inventory, dependencies, findings, dependency map, question
-answering, revision comparison and exports.
+A dark navy workstation with five views: **Overview**, **Documents**, **HLD Analysis**, and the
+two governance views, **Review Queue** and **Audit Trail**. Overview is a dashboard of the
+workspace's current state. HLD Analysis is the engineering surface: a persistent document toolbar,
+a readout strip of entity, link and finding counts, then tabs for the inventory, dependencies,
+findings, dependency map, question answering, revision comparison and exports.
 
 The visual layer lives in `ui/theme.py` — a small design system of palette tokens, a stylesheet,
-and presentational helpers (page headers, KPI strips, panels, dense tables, chips, callouts,
-evidence blocks, empty states). It deliberately uses the operating system's native font stack and
-inline SVG rather than a web font or icon pack, because anything fetched from a CDN would fail on
-an air-gapped machine and render as raw text.
+and presentational helpers (page headers, readout strips, panels, dense tables, chips, callouts,
+evidence blocks, empty states). Surfaces are flat and separated by hairline rules rather than
+stacked cards, so the data stays the loudest thing on the page. It deliberately uses the operating
+system's native font stack and inline SVG rather than a web font or icon pack, because anything
+fetched from a CDN would fail on an air-gapped machine and render as raw text.
+
+Two Streamlit behaviours are worth knowing before editing the UI. Imported modules are cached, so
+changes to `ui/theme.py` or `ui/common.py` need a server restart rather than a browser refresh.
+And `stMarkdownContainer` carries a `-1rem` bottom margin to cancel a trailing paragraph margin;
+custom markup has no such margin, so the stylesheet resets it — without that, anything rendered
+after a custom block overlaps it.
 
 Read-only tables are rendered as HTML by `theme.table` rather than `st.dataframe`. Streamlit's
 grid draws to a canvas, so neither its row height nor its type scale can be adjusted, and a dense
